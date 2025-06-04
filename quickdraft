@@ -1,0 +1,57 @@
+package org.example;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+
+/**
+ * Main class for the QuickDraft application.
+ * This application reads data from an Excel file, processes a Word document by replacing placeholders,
+ * and generates PDFs for each processed entry.
+ */
+public class QuickDraft {
+
+    /**
+     * Main method to execute the QuickDraft application.
+     * Steps:
+     * 1. Reads Excel data from "today" and "default" sheets using ExcelReader.
+     * 2. Processes a Word document using WordReader, replacing placeholders with Excel data.
+     * 3. Generates PDFs using GeneratePDF for each processed document.
+     *
+     * @param args command-line arguments (not used)
+     */
+    public static void main(String[] args) {
+        try {
+            // Step 1: Read Excel data
+            ExcelReader excelReader = new ExcelReader();
+            Map<String, List<String>> dataMap = excelReader.readExcelData();
+            List<String> headers = excelReader.getHeaders();
+            List<String> defaultHeaders = excelReader.getDefaultHeaders();
+            List<String> defaultValues = excelReader.getDefaultValues();
+
+            // Log the data for debugging
+            System.out.println("Excel data mapped successfully:");
+            System.out.println("Headers (today sheet): " + headers);
+            System.out.println("Default Headers (default sheet): " + defaultHeaders);
+            System.out.println("Default Values (default sheet): " + defaultValues);
+            for (Entry<String, List<String>> entry : dataMap.entrySet()) {
+                System.out.println(entry.getKey() + ": " + entry.getValue());
+            }
+
+            // Step 2: Process Word document
+            WordReader wordProcessor = new WordReader();
+            List<Entry<String, String>> updatedContents = wordProcessor.processWordDocument(
+                    dataMap, headers, defaultHeaders, defaultValues);
+
+            // Step 3: Generate PDFs
+            GeneratePDF pdfGenerator = new GeneratePDF();
+            pdfGenerator.generatePDFs(updatedContents);
+
+            System.out.println("PDF generation completed.");
+
+        } catch (Exception e) {
+            System.err.println("Error processing files: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+}
