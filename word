@@ -1,0 +1,618 @@
+//package org.example;
+//
+//import java.io.FileInputStream;
+//import java.io.IOException;
+//import java.util.AbstractMap;
+//import java.util.ArrayList;
+//import java.util.List;
+//import java.util.Map;
+//import org.apache.poi.xwpf.usermodel.IBodyElement;
+//import org.apache.poi.xwpf.usermodel.XWPFDocument;
+//import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+//import org.apache.poi.xwpf.usermodel.XWPFTable;
+//import org.apache.poi.xwpf.usermodel.XWPFTableCell;
+//import org.apache.poi.xwpf.usermodel.XWPFTableRow;
+//import org.slf4j.Logger;
+//import org.slf4j.LoggerFactory;
+//
+///**
+// * Class responsible for reading and processing a Word document template.
+// * Supports placeholder replacement using data from both "today" and "default" sheets.
+// */
+//public class WordReader {
+//    private static final Logger logger = LoggerFactory.getLogger(WordReader.class);
+//    private final String wordPath = ConfigUtil.getProperty("word.path");
+//
+//    public List<Map.Entry<String, String>> processWordDocument(Map<String, List<String>> excelData, List<String> headers,
+//            List<String> defaultHeaders, List<String> defaultValues) throws IOException {
+//        List<Map.Entry<String, String>> updatedContents = new ArrayList<>();
+//
+//        // Step 1: Read the Word document and collect all text for placeholder validation
+//        StringBuilder allText = new StringBuilder();
+//        try (FileInputStream fis = new FileInputStream(wordPath);
+//             XWPFDocument doc = new XWPFDocument(fis)) {
+//
+//            // Iterate through all document elements to collect text
+//            for (IBodyElement element : doc.getBodyElements()) {
+//                // Handle paragraphs
+//                if (element instanceof XWPFParagraph) {
+//                    XWPFParagraph paragraph = (XWPFParagraph) element;
+//                    String text = paragraph.getText();
+//                    if (text != null && !text.trim().isEmpty()) {
+//                        allText.append(text).append(" ");
+//                    }
+//                }
+//                // Handle tables
+//                if (element instanceof XWPFTable) {
+//                    XWPFTable table = (XWPFTable) element;
+//                    for (XWPFTableRow row : table.getRows()) {
+//                        for (XWPFTableCell cell : row.getTableCells()) {
+//                            String cellText = cell.getText();
+//                            if (cellText != null && !cellText.trim().isEmpty()) {
+//                                allText.append(cellText).append(" ");
+//                            }
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//
+//        // Validate placeholders in the original document text
+//        List<String> allHeaders = new ArrayList<>();
+//        allHeaders.add("ID");
+//        allHeaders.addAll(headers);
+//        allHeaders.addAll(defaultHeaders); // Add default headers for validation
+//        String allTextString = allText.toString();
+//        for (String header : allHeaders) {
+//            String placeholder = "<$" + header + "$>";
+//            if (!allTextString.contains(placeholder)) {
+//                logger.warn("Placeholder '{}' for header '{}' not found in the Word document.", placeholder, header);
+//            }
+//        }
+//
+//        // Step 2: Process each Excel row and generate HTML content
+//        for (Map.Entry<String, List<String>> entry : excelData.entrySet()) {
+//            String id = entry.getKey();
+//            List<String> values = entry.getValue();
+//
+//            // Read the Word document again to build HTML with replaced values
+//            StringBuilder htmlContent = new StringBuilder("<html><body>");
+//            try (FileInputStream fis = new FileInputStream(wordPath);
+//                 XWPFDocument doc = new XWPFDocument(fis)) {
+//
+//                // Iterate through all document elements (paragraphs and tables)
+//                int elementIndex = 0;
+//                List<IBodyElement> elements = doc.getBodyElements();
+//                while (elementIndex < elements.size()) {
+//                    IBodyElement element = elements.get(elementIndex);
+//
+//                    // Handle paragraphs (headings, text)
+//                    if (element instanceof XWPFParagraph) {
+//                        XWPFParagraph paragraph = (XWPFParagraph) element;
+//                        String text = paragraph.getText();
+//                        if (text != null && !text.trim().isEmpty()) {
+//                            // Replace placeholders in the paragraph
+//                            String updatedText = text;
+//                            // Replace "today" sheet placeholders
+//                            updatedText = updatedText.replace("<$ID$>", id);
+//                            for (int i = 0; i < headers.size(); i++) {
+//                                String placeholder = "<$" + headers.get(i) + "$>";
+//                                updatedText = updatedText.replace(placeholder, values.get(i));
+//                            }
+//                            // Replace "default" sheet placeholders
+//                            for (int i = 0; i < defaultHeaders.size(); i++) {
+//                                String placeholder = "<$" + defaultHeaders.get(i) + "$>";
+//                                updatedText = updatedText.replace(placeholder, defaultValues.get(i));
+//                            }
+//
+//                            // Determine heading level based on style (if any)
+//                            String style = paragraph.getStyle();
+//                            if (style != null && style.startsWith("Heading")) {
+//                                try {
+//                                    int level = Integer.parseInt(style.replace("Heading", ""));
+//                                    htmlContent.append("<h").append(level).append(">")
+//                                               .append(updatedText)
+//                                               .append("</h").append(level).append(">");
+//                                } catch (NumberFormatException e) {
+//                                    htmlContent.append("<p>").append(updatedText).append("</p>");
+//                                }
+//                            } else {
+//                                htmlContent.append("<p>").append(updatedText).append("</p>");
+//                            }
+//                        }
+//                    }
+//
+//                    // Handle tables
+//                    if (element instanceof XWPFTable) {
+//                        XWPFTable table = (XWPFTable) element;
+//                        htmlContent.append("<table border='1' style='border-collapse: collapse; width: 50%;'>");
+//                        for (XWPFTableRow row : table.getRows()) {
+//                            htmlContent.append("<tr>");
+//                            for (XWPFTableCell cell : row.getTableCells()) {
+//                                String cellText = cell.getText();
+//                                // Replace placeholders in the cell
+//                                String updatedCellText = cellText;
+//                                // Replace "today" sheet placeholders
+//                                updatedCellText = updatedCellText.replace("<$ID$>", id);
+//                                for (int i = 0; i < headers.size(); i++) {
+//                                    String placeholder = "<$" + headers.get(i) + "$>";
+//                                    updatedCellText = updatedCellText.replace(placeholder, values.get(i));
+//                                }
+//                                // Replace "default" sheet placeholders
+//                                for (int i = 0; i < defaultHeaders.size(); i++) {
+//                                    String placeholder = "<$" + defaultHeaders.get(i) + "$>";
+//                                    updatedCellText = updatedCellText.replace(placeholder, defaultValues.get(i));
+//                                }
+//                                // Determine if it's a header row
+//                                boolean isHeaderRow = row == table.getRow(0);
+//                                if (isHeaderRow) {
+//                                    htmlContent.append("<th>").append(updatedCellText).append("</th>");
+//                                } else {
+//                                    htmlContent.append("<td>").append(updatedCellText).append("</td>");
+//                                }
+//                            }
+//                            htmlContent.append("</tr>");
+//                        }
+//                        htmlContent.append("</table>");
+//                    }
+//
+//                    elementIndex++;
+//                }
+//            }
+//
+//            htmlContent.append("</body></html>");
+//            updatedContents.add(new AbstractMap.SimpleEntry<>(id, htmlContent.toString()));
+//        }
+//
+//        return updatedContents;
+//    }
+//} --------------------------->
+//package org.example;
+//
+//import java.io.FileInputStream;
+//import java.io.IOException;
+//import java.util.AbstractMap;
+//import java.util.ArrayList;
+//import java.util.List;
+//import java.util.Map;
+//import org.apache.poi.xwpf.usermodel.IBodyElement;
+//import org.apache.poi.xwpf.usermodel.XWPFDocument;
+//import org.apache.poi.xwpf.usermodel.XWPFHeader;
+//import org.apache.poi.xwpf.usermodel.XWPFFooter;
+//import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+//import org.apache.poi.xwpf.usermodel.XWPFTable;
+//import org.apache.poi.xwpf.usermodel.XWPFTableCell;
+//import org.apache.poi.xwpf.usermodel.XWPFTableRow;
+//import org.slf4j.Logger;
+//import org.slf4j.LoggerFactory;
+//
+///**
+// * Class responsible for reading and processing a Word document template.
+// * Supports placeholder replacement using data from both "today" and "default" sheets.
+// * Processes headers, footers, paragraphs, and tables, converting them to HTML.
+// */
+//public class WordReader {
+//    private static final Logger logger = LoggerFactory.getLogger(WordReader.class);
+//    private final String wordPath = ConfigUtil.getProperty("word.path");
+//
+//    public List<Map.Entry<String, String>> processWordDocument(Map<String, List<String>> excelData, List<String> headers,
+//            List<String> defaultHeaders, List<String> defaultValues) throws IOException {
+//        List<Map.Entry<String, String>> updatedContents = new ArrayList<>();
+//
+//        // Step 1: Read the Word document and collect all text for placeholder validation
+//        StringBuilder allText = new StringBuilder();
+//        try (FileInputStream fis = new FileInputStream(wordPath);
+//             XWPFDocument doc = new XWPFDocument(fis)) {
+//
+//            // Collect text from headers
+//            for (XWPFHeader header : doc.getHeaderList()) {
+//                String headerText = header.getText();
+//                if (headerText != null && !headerText.trim().isEmpty()) {
+//                    allText.append(headerText).append(" ");
+//                }
+//            }
+//
+//            // Collect text from footers
+//            for (XWPFFooter footer : doc.getFooterList()) {
+//                String footerText = footer.getText();
+//                if (footerText != null && !footerText.trim().isEmpty()) {
+//                    allText.append(footerText).append(" ");
+//                }
+//            }
+//
+//            // Collect text from the main body (paragraphs and tables)
+//            for (IBodyElement element : doc.getBodyElements()) {
+//                if (element instanceof XWPFParagraph) {
+//                    XWPFParagraph paragraph = (XWPFParagraph) element;
+//                    String text = paragraph.getText();
+//                    if (text != null && !text.trim().isEmpty()) {
+//                        allText.append(text).append(" ");
+//                    }
+//                }
+//                if (element instanceof XWPFTable) {
+//                    XWPFTable table = (XWPFTable) element;
+//                    for (XWPFTableRow row : table.getRows()) {
+//                        for (XWPFTableCell cell : row.getTableCells()) {
+//                            String cellText = cell.getText();
+//                            if (cellText != null && !cellText.trim().isEmpty()) {
+//                                allText.append(cellText).append(" ");
+//                            }
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//
+//        // Validate placeholders in the original document text
+//        List<String> allHeaders = new ArrayList<>();
+//        allHeaders.add("ID");
+//        allHeaders.addAll(headers);
+//        allHeaders.addAll(defaultHeaders); // Add default headers for validation
+//        String allTextString = allText.toString();
+//        for (String header : allHeaders) {
+//            String placeholder = "<$" + header + "$>";
+//            if (!allTextString.contains(placeholder)) {
+//                logger.warn("Placeholder '{}' for header '{}' not found in the Word document.", placeholder, header);
+//            }
+//        }
+//
+//        // Step 2: Process each Excel row and generate HTML content
+//        for (Map.Entry<String, List<String>> entry : excelData.entrySet()) {
+//            String id = entry.getKey();
+//            List<String> values = entry.getValue();
+//
+//            // Read the Word document again to build HTML with replaced values
+//            StringBuilder htmlContent = new StringBuilder();
+//            htmlContent.append("<html><head>")
+//                       .append("<style>")
+//                       .append("body { font-family: Arial, sans-serif; margin: 40px 20px; }")
+//                       .append("p, table, th, td { font-size: 12pt; margin: 5px 0; line-height: 1.2; text-align: left; }")
+//                       .append("h1, h2 { font-size: 14pt; margin: 10px 0; text-align: left; }")
+//                       .append("table { border-collapse: collapse; width: 50%; }")
+//                       .append("th, td { border: 1px solid black; padding: 8px; }")
+//                       .append("th { background-color: #f2f2f2; }")
+//                       .append(".header, .footer { width: 100%; text-align: center; font-size: 10pt; }")
+//                       .append("@page { margin: 40px 20px; @top-center { content: element(header); } @bottom-center { content: element(footer); } }")
+//                       .append("</style>")
+//                       .append("</head><body>");
+//
+//            try (FileInputStream fis = new FileInputStream(wordPath);
+//                 XWPFDocument doc = new XWPFDocument(fis)) {
+//
+//                // Process headers
+//                StringBuilder headerText = new StringBuilder();
+//                for (XWPFHeader header : doc.getHeaderList()) {
+//                    for (XWPFParagraph paragraph : header.getParagraphs()) {
+//                        String text = paragraph.getText();
+//                        if (text != null && !text.trim().isEmpty()) {
+//                            String updatedText = text;
+//                            // Replace "today" sheet placeholders
+//                            updatedText = updatedText.replace("<$ID$>", id);
+//                            for (int i = 0; i < headers.size(); i++) {
+//                                String placeholder = "<$" + headers.get(i) + "$>";
+//                                updatedText = updatedText.replace(placeholder, values.get(i));
+//                            }
+//                            // Replace "default" sheet placeholders
+//                            for (int i = 0; i < defaultHeaders.size(); i++) {
+//                                String placeholder = "<$" + defaultHeaders.get(i) + "$>";
+//                                updatedText = updatedText.replace(placeholder, defaultValues.get(i));
+//                            }
+//                            headerText.append("<p>").append(updatedText).append("</p>");
+//                        }
+//                    }
+//                }
+//                if (headerText.length() > 0) {
+//                    htmlContent.append("<div class='header'>").append(headerText).append("</div>");
+//                }
+//
+//                // Process the main body (paragraphs and tables)
+//                int elementIndex = 0;
+//                List<IBodyElement> elements = doc.getBodyElements();
+//                while (elementIndex < elements.size()) {
+//                    IBodyElement element = elements.get(elementIndex);
+//
+//                    // Handle paragraphs (headings, text)
+//                    if (element instanceof XWPFParagraph) {
+//                        XWPFParagraph paragraph = (XWPFParagraph) element;
+//                        String text = paragraph.getText();
+//                        if (text != null && !text.trim().isEmpty()) {
+//                            // Replace placeholders in the paragraph
+//                            String updatedText = text;
+//                            // Replace "today" sheet placeholders
+//                            updatedText = updatedText.replace("<$ID$>", id);
+//                            for (int i = 0; i < headers.size(); i++) {
+//                                String placeholder = "<$" + headers.get(i) + "$>";
+//                                updatedText = updatedText.replace(placeholder, values.get(i));
+//                            }
+//                            // Replace "default" sheet placeholders
+//                            for (int i = 0; i < defaultHeaders.size(); i++) {
+//                                String placeholder = "<$" + defaultHeaders.get(i) + "$>";
+//                                updatedText = updatedText.replace(placeholder, defaultValues.get(i));
+//                            }
+//
+//                            // Determine heading level based on style (if any)
+//                            String style = paragraph.getStyle();
+//                            if (style != null && style.startsWith("Heading")) {
+//                                try {
+//                                    int level = Integer.parseInt(style.replace("Heading", ""));
+//                                    htmlContent.append("<h").append(level).append(">")
+//                                               .append(updatedText)
+//                                               .append("</h").append(level).append(">");
+//                                } catch (NumberFormatException e) {
+//                                    htmlContent.append("<p>").append(updatedText).append("</p>");
+//                                }
+//                            } else {
+//                                htmlContent.append("<p>").append(updatedText).append("</p>");
+//                            }
+//                        }
+//                    }
+//
+//                    // Handle tables
+//                    if (element instanceof XWPFTable) {
+//                        XWPFTable table = (XWPFTable) element;
+//                        htmlContent.append("<table border='1' style='border-collapse: collapse; width: 50%;'>");
+//                        for (XWPFTableRow row : table.getRows()) {
+//                            htmlContent.append("<tr>");
+//                            for (XWPFTableCell cell : row.getTableCells()) {
+//                                String cellText = cell.getText();
+//                                // Replace placeholders in the cell
+//                                String updatedCellText = cellText;
+//                                // Replace "today" sheet placeholders
+//                                updatedCellText = updatedCellText.replace("<$ID$>", id);
+//                                for (int i = 0; i < headers.size(); i++) {
+//                                    String placeholder = "<$" + headers.get(i) + "$>";
+//                                    updatedCellText = updatedCellText.replace(placeholder, values.get(i));
+//                                }
+//                                // Replace "default" sheet placeholders
+//                                for (int i = 0; i < defaultHeaders.size(); i++) {
+//                                    String placeholder = "<$" + defaultHeaders.get(i) + "$>";
+//                                    updatedCellText = updatedCellText.replace(placeholder, defaultValues.get(i));
+//                                }
+//                                // Determine if it's a header row
+//                                boolean isHeaderRow = row == table.getRow(0);
+//                                if (isHeaderRow) {
+//                                    htmlContent.append("<th>").append(updatedCellText).append("</th>");
+//                                } else {
+//                                    htmlContent.append("<td>").append(updatedCellText).append("</td>");
+//                                }
+//                            }
+//                            htmlContent.append("</tr>");
+//                        }
+//                        htmlContent.append("</table>");
+//                    }
+//
+//                    elementIndex++;
+//                }
+//
+//                // Process footers
+//                StringBuilder footerText = new StringBuilder();
+//                for (XWPFFooter footer : doc.getFooterList()) {
+//                    for (XWPFParagraph paragraph : footer.getParagraphs()) {
+//                        String text = paragraph.getText();
+//                        if (text != null && !text.trim().isEmpty()) {
+//                            String updatedText = text;
+//                            // Replace "today" sheet placeholders
+//                            updatedText = updatedText.replace("<$ID$>", id);
+//                            for (int i = 0; i < headers.size(); i++) {
+//                                String placeholder = "<$" + headers.get(i) + "$>";
+//                                updatedText = updatedText.replace(placeholder, values.get(i));
+//                            }
+//                            // Replace "default" sheet placeholders
+//                            for (int i = 0; i < defaultHeaders.size(); i++) {
+//                                String placeholder = "<$" + defaultHeaders.get(i) + "$>";
+//                                updatedText = updatedText.replace(placeholder, defaultValues.get(i));
+//                            }
+//                            footerText.append("<p>").append(updatedText).append("</p>");
+//                        }
+//                    }
+//                }
+//                if (footerText.length() > 0) {
+//                    htmlContent.append("<div class='footer'>").append(footerText).append("</div>");
+//                }
+//            }
+//
+//            htmlContent.append("</body></html>");
+//            updatedContents.add(new AbstractMap.SimpleEntry<>(id, htmlContent.toString()));
+//        }
+//
+//        return updatedContents;
+//    }
+//}
+package org.example;
+
+import com.aspose.words.Document;
+import com.aspose.words.SaveFormat;
+import org.apache.poi.xwpf.usermodel.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.*;
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Class responsible for reading and processing a Word document template.
+ * Replaces placeholders with data from "today" and "default" sheets, then converts the modified document to PDF
+ * using Aspose.Words to preserve original formatting, including page count, headers, footers, and page numbers.
+ */
+public class WordReader {
+    private static final Logger logger = LoggerFactory.getLogger(WordReader.class);
+    private final String wordPath = ConfigUtil.getProperty("word.path");
+
+    public List<Map.Entry<String, String>> processWordDocument(Map<String, List<String>> excelData, List<String> headers,
+            List<String> defaultHeaders, List<String> defaultValues) throws IOException {
+        List<Map.Entry<String, String>> updatedContents = new ArrayList<>();
+
+        // Step 1: Read the Word document and collect all text for placeholder validation
+        StringBuilder allText = new StringBuilder();
+        try (FileInputStream fis = new FileInputStream(wordPath);
+             XWPFDocument doc = new XWPFDocument(fis)) {
+
+            // Collect text from headers
+            for (XWPFHeader header : doc.getHeaderList()) {
+                String headerText = header.getText();
+                if (headerText != null && !headerText.trim().isEmpty()) {
+                    allText.append(headerText).append(" ");
+                }
+            }
+
+            // Collect text from footers
+            for (XWPFFooter footer : doc.getFooterList()) {
+                String footerText = footer.getText();
+                if (footerText != null && !footerText.trim().isEmpty()) {
+                    allText.append(footerText).append(" ");
+                }
+            }
+
+            // Collect text from the main body (paragraphs and tables)
+            for (IBodyElement element : doc.getBodyElements()) {
+                if (element instanceof XWPFParagraph) {
+                    XWPFParagraph paragraph = (XWPFParagraph) element;
+                    String text = paragraph.getText();
+                    if (text != null && !text.trim().isEmpty()) {
+                        allText.append(text).append(" ");
+                    }
+                }
+                if (element instanceof XWPFTable) {
+                    XWPFTable table = (XWPFTable) element;
+                    for (XWPFTableRow row : table.getRows()) {
+                        for (XWPFTableCell cell : row.getTableCells()) {
+                            String cellText = cell.getText();
+                            if (cellText != null && !cellText.trim().isEmpty()) {
+                                allText.append(cellText).append(" ");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Validate placeholders in the original document text
+        List<String> allHeaders = new ArrayList<>();
+        allHeaders.add("ID");
+        allHeaders.addAll(headers);
+        allHeaders.addAll(defaultHeaders); // Add default headers for validation
+        String allTextString = allText.toString();
+        for (String header : allHeaders) {
+            String placeholder = "<$" + header + "$>";
+            if (!allTextString.contains(placeholder)) {
+                logger.warn("Placeholder '{}' for header '{}' not found in the Word document.", placeholder, header);
+            }
+        }
+
+        // Step 2: Process each Excel row and generate PDF
+        for (Map.Entry<String, List<String>> entry : excelData.entrySet()) {
+            String id = entry.getKey();
+            List<String> values = entry.getValue();
+
+            // Create a temporary file for the modified Word document
+            File tempWordFile = File.createTempFile("modified_" + id, ".docx");
+            File tempPdfFile = File.createTempFile("output_" + id, ".pdf");
+
+            try (FileInputStream fis = new FileInputStream(wordPath);
+                 XWPFDocument doc = new XWPFDocument(fis);
+                 FileOutputStream fos = new FileOutputStream(tempWordFile)) {
+
+                // Process headers
+                for (XWPFHeader header : doc.getHeaderList()) {
+                    for (XWPFParagraph paragraph : header.getParagraphs()) {
+                        replacePlaceholdersInParagraph(paragraph, id, headers, values, defaultHeaders, defaultValues);
+                    }
+                }
+
+                // Process the main body (paragraphs and tables)
+                for (IBodyElement element : doc.getBodyElements()) {
+                    if (element instanceof XWPFParagraph) {
+                        XWPFParagraph paragraph = (XWPFParagraph) element;
+                        replacePlaceholdersInParagraph(paragraph, id, headers, values, defaultHeaders, defaultValues);
+                    }
+                    if (element instanceof XWPFTable) {
+                        XWPFTable table = (XWPFTable) element;
+                        for (XWPFTableRow row : table.getRows()) {
+                            for (XWPFTableCell cell : row.getTableCells()) {
+                                for (XWPFParagraph paragraph : cell.getParagraphs()) {
+                                    replacePlaceholdersInParagraph(paragraph, id, headers, values, defaultHeaders, defaultValues);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Process footers
+                for (XWPFFooter footer : doc.getFooterList()) {
+                    for (XWPFParagraph paragraph : footer.getParagraphs()) {
+                        replacePlaceholdersInParagraph(paragraph, id, headers, values, defaultHeaders, defaultValues);
+                    }
+                }
+
+                // Save the modified Word document to the temporary file
+                doc.write(fos);
+            }
+
+            // Step 3: Convert the modified Word document to PDF using Aspose.Words
+            try {
+                Document asposeDoc = new Document(tempWordFile.getAbsolutePath());
+                asposeDoc.save(tempPdfFile.getAbsolutePath(), SaveFormat.PDF);
+                logger.info("PDF generated for ID {} at: {}", id, tempPdfFile.getAbsolutePath());
+
+                // Read the PDF file content as a string (for compatibility with existing code)
+                // Note: For actual PDF generation, this step might be skipped, and the file path can be used directly
+                String pdfFilePath = tempPdfFile.getAbsolutePath();
+                updatedContents.add(new AbstractMap.SimpleEntry<>(id, pdfFilePath));
+            } catch (Exception e) {
+                logger.error("Error converting Word to PDF for ID {}: {}", id, e.getMessage(), e);
+                throw new IOException("Failed to convert Word to PDF for ID " + id, e);
+            } finally {
+                // Clean up temporary Word file
+                if (tempWordFile.exists()) {
+                    tempWordFile.delete();
+                }
+                // Note: The PDF file is not deleted as it might be needed by GeneratePDF
+            }
+        }
+
+        return updatedContents;
+    }
+
+    /**
+     * Replaces placeholders in a paragraph with actual values from Excel data.
+     *
+     * @param paragraph       the paragraph to process
+     * @param id              the ID value for replacement
+     * @param headers         headers from the "today" sheet
+     * @param values          values from the "today" sheet for the current row
+     * @param defaultHeaders  headers from the "default" sheet
+     * @param defaultValues   values from the "default" sheet
+     */
+    private void replacePlaceholdersInParagraph(XWPFParagraph paragraph, String id, List<String> headers,
+            List<String> values, List<String> defaultHeaders, List<String> defaultValues) {
+        String text = paragraph.getText();
+        if (text == null || text.trim().isEmpty()) {
+            return;
+        }
+
+        String updatedText = text;
+        // Replace "today" sheet placeholders
+        updatedText = updatedText.replace("<$ID$>", id);
+        for (int i = 0; i < headers.size(); i++) {
+            String placeholder = "<$" + headers.get(i) + "$>";
+            updatedText = updatedText.replace(placeholder, values.get(i));
+        }
+        // Replace "default" sheet placeholders
+        for (int i = 0; i < defaultHeaders.size(); i++) {
+            String placeholder = "<$" + defaultHeaders.get(i) + "$>";
+            updatedText = updatedText.replace(placeholder, defaultValues.get(i));
+        }
+
+        // Clear existing runs in the paragraph3
+        while (paragraph.getRuns().size() > 0) {
+            paragraph.removeRun(0);
+        }
+
+        // Add the updated text as a new run, preserving the paragraph's formatting
+        XWPFRun run = paragraph.createRun();
+        run.setText(updatedText);
+    }
+}
