@@ -1,0 +1,124 @@
+package org.example;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.xssf.usermodel.XSSFRow;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+/**
+ * Class responsible for reading data from an Excel file.
+ * Reads the "today" sheet (sheet 0) for headers and data rows, and the "default" sheet (sheet 1) for default headers and values.
+ */
+public class ExcelReader {
+    private final String excelPath = ConfigUtil.getProperty("excel.path");
+    private Map<String, List<String>> dataMap;
+    private List<String> headers;
+    private List<String> defaultHeaders;
+    private List<String> defaultValues;
+
+    public ExcelReader() {
+        dataMap = new HashMap<>();
+        headers = new ArrayList<>();
+        defaultHeaders = new ArrayList<>();
+        defaultValues = new ArrayList<>();
+    }
+
+    public Map<String, List<String>> readExcelData() throws IOException {
+        try (FileInputStream fis = new FileInputStream(excelPath);
+             XSSFWorkbook workbook = new XSSFWorkbook(fis)) {
+
+            // Read "today" sheet (sheet 0)
+            XSSFSheet todaySheet = workbook.getSheetAt(0);
+            if (todaySheet == null) {
+                throw new IOException("No 'today' sheet found at index 0 in the Excel file.");
+            }
+            XSSFRow headerRow = todaySheet.getRow(0);
+            if (headerRow == null) {
+                throw new IOException("Header row is missing in 'today' sheet.");
+            }
+
+            // Read headers (excluding ID)
+            for (int i = 1; i < headerRow.getLastCellNum(); i++) {
+                headers.add(headerRow.getCell(i) != null ? headerRow.getCell(i).getStringCellValue().trim() : "");
+            }
+            if (headers.isEmpty()) {
+                throw new IOException("No valid headers found after 'ID' column in 'today' sheet.");
+            }
+
+            // Use DataFormatter to handle numeric values
+            DataFormatter formatter = new DataFormatter();
+
+            // Read data rows from "today" sheet
+            for (int i = 1; i <= todaySheet.getLastRowNum(); i++) {
+                XSSFRow row = todaySheet.getRow(i);
+                if (row == null) {
+                    System.err.println("Skipping empty row at index " + (i + 1) + " in 'today' sheet.");
+                    continue;
+                }
+                if (row.getCell(0) == null || row.getCell(0).toString().trim().isEmpty()) {
+                    System.err.println("Skipping row " + (i + 1) + " in 'today' sheet: Missing or empty ID.");
+                    continue;
+                }
+                String id = row.getCell(0).toString().trim();
+                if (dataMap.containsKey(id)) {
+                    throw new IOException("Duplicate primary key found: " + id + " in row " + (i + 1) + " of 'today' sheet.");
+                }
+
+                List<String> values = new ArrayList<>();
+                for (int j = 1; j < headerRow.getLastCellNum(); j++) {
+                    values.add(row.getCell(j) != null ? formatter.formatCellValue(row.getCell(j)).trim() : "");
+                }
+                dataMap.put(id, values);
+            }
+
+            // Read "default" sheet (sheet 1)
+            XSSFSheet defaultSheet = workbook.getSheetAt(1);
+            if (defaultSheet == null) {
+                throw new IOException("No 'default' sheet found at index 1 in the Excel file.");
+            }
+
+            // Read default headers (row 0 of default sheet)
+            XSSFRow defaultHeaderRow = defaultSheet.getRow(0);
+            if (defaultHeaderRow == null) {
+                throw new IOException("Header row is missing in 'default' sheet.");
+            }
+            for (int i = 0; i < defaultHeaderRow.getLastCellNum(); i++) {
+                defaultHeaders.add(defaultHeaderRow.getCell(i) != null ? defaultHeaderRow.getCell(i).getStringCellValue().trim() : "");
+            }
+            if (defaultHeaders.isEmpty()) {
+                throw new IOException("No valid headers found in 'default' sheet.");
+            }
+
+            // Read default values (row 1 of default sheet)
+            XSSFRow defaultValueRow = defaultSheet.getRow(1);
+            if (defaultValueRow == null) {
+                throw new IOException("Values row (row 2) is missing in 'default' sheet.");
+            }
+            for (int i = 0; i < defaultHeaderRow.getLastCellNum(); i++) {
+                defaultValues.add(defaultValueRow.getCell(i) != null ? formatter.formatCellValue(defaultValueRow.getCell(i)).trim() : "");
+            }
+            if (defaultValues.size() != defaultHeaders.size()) {
+                throw new IOException("Mismatch between number of headers (" + defaultHeaders.size() + ") and values (" + defaultValues.size() + ") in 'default' sheet.");
+            }
+        }
+        return dataMap;
+    }
+
+    public List<String> getHeaders() {
+        return headers;
+    }
+
+    public List<String> getDefaultHeaders() {
+        return defaultHeaders;
+    }
+
+    public List<String> getDefaultValues() {
+        return defaultValues;
+    }
+}
